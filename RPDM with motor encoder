@@ -1,0 +1,60 @@
+#include <Encoder.h>
+
+Encoder myEnc(2, 3);      // Encoder Pins
+const int switchPin = 4;  // Momentary switch pin
+const int relayPin = 6;   // Relay Pin
+
+volatile long oldPosition = 0;
+long newPosition = 0;  // Declare newPosition as a global variable
+
+const int encoderThreshold = 60;  // Encoder Threshold
+const unsigned long changeInterval = 2000;  // Waittime After Detachment of Payload
+unsigned long lastChangeTime = 0;
+
+void setup() {
+  pinMode(switchPin, INPUT_PULLUP);  // Enable internal pull-up resistor for switch pin
+  pinMode(relayPin, OUTPUT);
+  Serial.begin(9600);  // Initialize serial communication
+}
+
+
+void loop() {
+  newPosition = myEnc.read();  // Read encoder count
+
+  if (newPosition != oldPosition) {
+    oldPosition = newPosition;
+    lastChangeTime = millis();
+  }
+  // turn off relay when momentary switch is pressed
+  if (digitalRead(switchPin) == LOW) {
+    Serial.println("Switch Pressed");
+    turnrelayoff();
+    resetEncoderCount(0);
+  }
+  // Activate motor when encoder count threshold is crossed and constant for given frame of time
+  if (newPosition > encoderThreshold && millis() - lastChangeTime >= changeInterval) {
+    Serial.println("Rotating motor clockwise...");
+    while (digitalRead(switchPin) == HIGH) {
+      turnrelayon();
+    }
+  }
+
+  // Print encoder count to Serial Monitor
+  Serial.print("Encoder count: ");
+  Serial.println(newPosition);
+  delay(500);  // Delay for readability
+}
+
+void turnrelayoff() {
+  digitalWrite(relayPin, HIGH);
+}
+
+void turnrelayon() {
+  digitalWrite(relayPin, LOW);
+}
+// Reset Encoder Count
+void resetEncoderCount(long count) {
+  myEnc.write(count);   // Set the encoder count to the desired value
+  oldPosition = count;  // Update the old position as well
+  newPosition = count;  // Update the new position as well
+}
