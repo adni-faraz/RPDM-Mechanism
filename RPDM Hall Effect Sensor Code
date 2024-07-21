@@ -1,0 +1,75 @@
+const int hallSensorPin = 2;      // Hall Effect Sensor Pin
+const int switchPin = 4;  // Momentary switch pin
+const int relayPin = 6;   // Relay Pin
+
+const unsigned long debounceDelay = 10;  // Debounce time in milliseconds
+const unsigned long detectionInterval = 2000;
+
+
+volatile long oldPosition = 0;
+long newPosition = 0;  // Declare newPosition as a global variable
+
+const int rotationThreshold = 3;  // Encoder Threshold
+const unsigned long changeInterval = 2000;  // Waittime After Detachment of Payload
+unsigned long lastChangeTime = 0;
+
+void setup() {
+  pinMode(switchPin, INPUT_PULLUP);  // Enable internal pull-up resistor for switch pin
+  pinMode(relayPin, OUTPUT);
+  pinMode(hallSensorPin, INPUT_PULLUP);
+  Serial.begin(9600);  // Initialize serial communication
+
+  attachInterrupt(digitalPinToInterrupt(hallSensorPin), IRInterrupt, CHANGE);
+}
+
+
+void loop() {
+  // turn off relay when momentary switch is pressed
+  if (digitalRead(switchPin) == LOW) {
+    Serial.println("Switch Pressed");
+    turnrelayoff();
+    resetRotationCount(0);
+  }
+  // Activate motor when encoder count threshold is crossed and constant for given frame of time
+  if (newPosition > rotationThreshold && millis() - lastChangeTime >= changeInterval) {
+    Serial.println("Rotating motor clockwise...");
+    while (digitalRead(switchPin) == HIGH) {
+      turnrelayon();
+    }
+  }
+
+  // Print encoder count to Serial Monitor
+  Serial.print("Rotation count: ");
+  Serial.println(newPosition);
+  delay(500);  // Delay for readability
+}
+
+void turnrelayoff() {
+  digitalWrite(relayPin, HIGH);
+}
+
+void turnrelayon() {
+  digitalWrite(relayPin, LOW);
+}
+// Reset Encoder Count
+void resetRotationCount(long count) {  // Set the encoder count to the desired value
+  oldPosition = count;  // Update the old position as well
+  newPosition = count;  // Update the new position as well
+}
+void IRInterrupt() {
+  // Read the state of the IR sensor pin
+  int sensorState = digitalRead(hallSensorPin);
+
+  // Debounce the signal
+  if (millis() - lastChangeTime >= debounceDelay) {
+    // Update the last change time
+    lastChangeTime = millis();
+
+    // Update count based on sensor state
+    if (sensorState == HIGH) {
+      newPosition++;
+    } else {
+      oldPosition++;
+    }
+  }
+}
