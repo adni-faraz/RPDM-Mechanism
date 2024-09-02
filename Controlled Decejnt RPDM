@@ -1,0 +1,111 @@
+int enA = 9;  // PWM pin for speed control
+int in1 = 8;  // Motor direction pin 1
+int in2 = 7;  // Motor direction pin 2
+
+const int pwmPin = 2;  // Pin connected to the PWM signal
+const int switchPin = 3;  // Pin connected to the switch
+const int hallSensorPin = 2;      // Hall Effect Sensor Pin
+
+// Variable to store the state of the switch
+int switchState = 0;
+unsigned long pulseWidth = 0; // Variable to store the pulse width
+
+
+const unsigned long debounceDelay = 10;  // Debounce time in milliseconds
+const unsigned long detectionInterval = 2000;
+
+
+volatile long oldPosition = 0;
+long newPosition = 0;  // Declare newPosition as a global variable
+
+const int rotationThreshold = 3;  // Encoder Threshold
+const unsigned long changeInterval = 2000;  // Waittime After Detachment of Payload
+unsigned long lastChangeTime = 0;
+
+
+void setup() {
+  pinMode(enA, OUTPUT);
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(pwmPin, INPUT);
+  pinMode(switchPin, INPUT_PULLUP);
+  pinMode(hallSensorPin, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(hallSensorPin), HallInterrupt, CHANGE);
+} 
+
+
+void loop() {
+
+  pulseWidth = pulseIn(pwmPin, HIGH);
+  Serial.print("PWM: ");
+  Serial.print(pulseWidth);
+
+  if (pulseWidth >= 2000){
+    rotateClockwise();
+    delay(2000); //neeed to figure actual time during testing
+
+    //Hall Effect Code
+    if (digitalRead(switchPin) == HIGH) {
+    Serial.println("Switch Pressed");
+    stopMotor();
+    resetRotationCount(0);
+  }
+  // Activate motor when encoder count threshold is crossed and constant for given frame of time
+  if (newPosition > rotationThreshold && millis() - lastChangeTime >= changeInterval) {
+    Serial.println("Rotating motor clockwise...");
+    while (digitalRead(switchPin)  == LOW) {
+      rotateCounterClockwise();
+    }
+  }
+
+  // Print encoder count to Serial Monitor
+  Serial.print("Rotation count: ");
+  Serial.println(newPosition);
+  delay(500);  // Delay for readability  
+}
+}
+
+void rotateClockwise() {
+  // Set motor direction to clockwise
+  digitalWrite(enA,HIGH);
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);
+}
+
+void rotateCounterClockwise() {
+  // Set motor direction to counterclockwise
+  digitalWrite(enA, HIGH);
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
+}
+
+void stopMotor(){
+  digitalWrite(enA, LOW);
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+}
+
+// Reset Encoder Count
+void resetRotationCount(long count) {  // Set the encoder count to the desired value
+  oldPosition = count;  // Update the old position as well
+  newPosition = count;  // Update the new position as well
+}
+
+void HallInterrupt() {
+  // Read the state of the IR sensor pin
+  int sensorState = digitalRead(hallSensorPin);
+
+  // Debounce the signal
+  if (millis() - lastChangeTime >= debounceDelay) {
+    // Update the last change time
+    lastChangeTime = millis();
+
+    // Update count based on sensor state
+    if (sensorState == HIGH) {
+      newPosition++;
+    } else {
+      oldPosition++;
+    }
+  }
+}
