@@ -1,0 +1,106 @@
+const int freefallTime = 4000; //Time before break is applied after threshold is crossed
+const int breakDuration = 400;
+
+
+const int hallSensorPin = 2;      // Hall Effect Sensor Pin
+const int switchPin = 3;          // Momentary switch pin
+const int relayPin = 4;           // Relay Pin
+
+const unsigned long debounceDelay = 10;    // Debounce time in milliseconds
+const unsigned long detectionInterval = 2000;
+const unsigned long changeInterval = 3000; // Wait time after detachment of payload
+
+volatile long oldPosition = 0;
+long newPosition = 0;
+
+const int rotationThreshold = 4;
+
+unsigned long lastChangeTime = 0;
+unsigned long descentStartTime = 0;
+bool isDescending = false;
+bool breakApplied = false;
+
+void setup() {
+  pinMode(switchPin, INPUT_PULLUP); // Enable internal pull-up resistor for switch pin
+  pinMode(relayPin, OUTPUT);
+  pinMode(hallSensorPin, INPUT_PULLUP);
+  Serial.begin(9600);  // Initialize serial communication
+  turnrelayon();
+
+  attachInterrupt(digitalPinToInterrupt(hallSensorPin), HallInterrupt, CHANGE);
+}
+
+void loop() {
+  //To wind the spool when Arduino is Reset
+  windMotorUntilSwitchPressed();
+  // Handle descending logic
+  if (newPosition > rotationThreshold && !isDescending && !breakApplied ) {// 
+    isDescending = true;
+    descentStartTime = millis();
+    Serial.println("Descending...");
+  }
+  if (isDescending && millis() - descentStartTime >= freefallTime && !breakApplied) {
+      brake(breakDuration); //Brake by turnin grelay on
+      Serial.println("Break Applied");
+      breakApplied = true;
+  }
+  if (newPosition> rotationThreshold && millis() - lastChangeTime >= changeInterval && breakApplied){
+    turnrelayon();
+    windMotorUntilSwitchPressed();
+    Serial.println("Switch Pressed");
+    isDescending = false;
+    breakApplied = false;
+  }
+  
+
+  //Display Rotation Count
+  Serial.print("Rotation count: ");
+  Serial.println(newPosition);
+  delay(500);  // Delay for readability
+}
+
+void brake(int duration) {
+  turnrelayon();
+  delay(duration);
+  turnrelayoff();
+}
+
+
+void windMotorUntilSwitchPressed() {
+  if (digitalRead(switchPin) == LOW) {
+    Serial.println("Switch Pressed");
+    turnrelayoff();
+    resetRotationCount(0);
+  }
+}
+
+void turnrelayoff() {
+  digitalWrite(relayPin, HIGH);
+}
+
+void turnrelayon() {
+  digitalWrite(relayPin, LOW);
+}
+
+void resetRotationCount(long count) {
+  oldPosition = count;
+  newPosition = count;
+}
+
+void HallInterrupt() {
+  // Read the state of the IR sensor pin
+  int sensorState = digitalRead(hallSensorPin);
+
+  // Debounce the signal
+  if (millis() - lastChangeTime >= debounceDelay) {
+    // Update the last change time
+    lastChangeTime = millis();
+
+    // Update count based on sensor state
+    if (sensorState == HIGH) {
+      newPosition++;
+    } else {
+      oldPosition++;
+    }
+  }
+}
